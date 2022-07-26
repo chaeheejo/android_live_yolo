@@ -40,8 +40,6 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Camera control buttons -->
-
     <ImageButton
         android:id="@+id/camera_capture_button"
         android:layout_width="92dp"
