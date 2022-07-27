@@ -37,6 +37,7 @@ import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp;
 import org.tensorflow.lite.support.image.ops.Rot90Op;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -56,6 +57,8 @@ public class CameraFragment extends Fragment {
     private ImageProcessor processor;
     private TensorImage tfImageBuffer = new TensorImage(DataType.UINT8);
     private ObjectDetectionHelper detector;
+    private List<ObjectDetectionHelper.ObjectPrediction> prediction;
+    private boolean pauseState;
 
     public CameraFragment() {
     }
@@ -90,7 +93,7 @@ public class CameraFragment extends Fragment {
         camera_btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                tfload();
+                captureImage();
             }
         });
 
@@ -131,8 +134,7 @@ public class CameraFragment extends Fragment {
             public void analyze(@NonNull ImageProxy image) {
                 if (!bitmapBuffer.isRecycled()){
                     imageRotationDegrees = image.getImageInfo().getRotationDegrees();
-                    bitmapBuffer = Bitmap.createBitmap(image.getWidth(), image.getHeight(),
-                            Bitmap.Config.ARGB_8888);
+                    bitmapBuffer = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
                 }
                 if(pauseState){
                     image.close();
@@ -140,7 +142,6 @@ public class CameraFragment extends Fragment {
                 }
 
                 bitmapBuffer.copyPixelsFromBuffer(image.getPlanes()[0].getBuffer());
-
                 int imageSize = Math.min(bitmapBuffer.getHeight(), bitmapBuffer.getWidth());
 
                 nnApiDelegate = new NnApiDelegate();
@@ -157,8 +158,7 @@ public class CameraFragment extends Fragment {
 
                 processor = new ImageProcessor.Builder()
                         .add(new ResizeWithCropOrPadOp(imageSize, imageSize))
-                        .add(new ResizeOp(
-                                tfInputSize.getHeight(), tfInputSize.getWidth(), ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+                        .add(new ResizeOp(tfInputSize.getHeight(), tfInputSize.getWidth(), ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
                         .add(new Rot90Op(-imageRotationDegrees / 90))
                         .add(new NormalizeOp(0f, 1f))
                         .build();
@@ -172,12 +172,19 @@ public class CameraFragment extends Fragment {
                     Log.e("analyze", "detector: "+e);
                 }
 
+                prediction = detector.predict(tfImage);
+                drawBox();
             }
         });
 
     }
 
-    private void tfload(){
+    private void drawBox(){
+
+    }
+
+
+    private void captureImage(){
 
     }
 
