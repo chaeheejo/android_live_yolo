@@ -56,6 +56,12 @@ public class ObjectDetectionHelper {
         private RectF location;
         private String label;
         private float score;
+
+        public float getScore() {
+            return score;
+        }
+        public RectF getLocation() { return location; }
+        public String getLabel() { return label; }
     }
 
 }
