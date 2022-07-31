@@ -72,8 +72,8 @@ public class CameraFragment extends Fragment {
     private ImageProcessor processor;
     private TensorImage tfImageBuffer;
 
-    private ObjectDetectionHelper detector;
-    private List<ObjectDetectionHelper.ObjectPrediction> prediction;
+    private ObjectDetection detector;
+    private List<ObjectDetection.ObjectPrediction> prediction;
 
     public CameraFragment() {
     }
@@ -121,6 +121,7 @@ public class CameraFragment extends Fragment {
         cameraProviderFuture.addListener(() -> {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                bindPreview(cameraProvider);
                 analysisImage(cameraProvider);
             } catch (ExecutionException | InterruptedException e) {
                 Log.e("home", "at listener: ", e);
@@ -129,19 +130,19 @@ public class CameraFragment extends Fragment {
 
     }
 
-//    private void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
-//        Preview preview = new Preview.Builder()
-//                .build();
-//
-//        CameraSelector cameraSelector = new CameraSelector.Builder()
-//                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-//                .build();
-//
-//        preview.setSurfaceProvider(previewView.getSurfaceProvider());
-//
-//        cameraProvider.unbindAll();
-//        cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview);
-//    }
+    private void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
+        Preview preview = new Preview.Builder()
+                .build();
+
+        CameraSelector cameraSelector = new CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build();
+
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        cameraProvider.unbindAll();
+        cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview);
+    }
 
     private void analysisImage(@NonNull ProcessCameraProvider cameraProvider){
         Preview preview = new Preview.Builder()
@@ -156,65 +157,67 @@ public class CameraFragment extends Fragment {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
 
-        imageAnalysis.setAnalyzer(executor, new ImageAnalysis.Analyzer() {
-            @Override
-            public void analyze(@NonNull ImageProxy image) {
-                if (!bitmapBuffer.isRecycled()) {
-                    imageRotationDegrees = image.getImageInfo().getRotationDegrees();
-                    bitmapBuffer = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
-                }
-                if (pauseState) {
-                    image.close();
-                    return;
-                }
 
-                bitmapBuffer.copyPixelsFromBuffer(image.getPlanes()[0].getBuffer());
-                int imageSize = Math.min(bitmapBuffer.getHeight(), bitmapBuffer.getWidth());
-
-                options.addDelegate(nnApiDelegate);
-                Log.d("camerafragment", "1success options");
-
-                try {
-                    tflite = new Interpreter(FileUtil.loadMappedFile(CameraFragment.this.requireContext(), "coco_ssd_mobilenet_v1_1.0_quant.tflite"), options);
-                } catch (IOException e) {
-                    Log.e("analyze", "tflite: " + e);
-                }
-
-                Log.d("camerafragment", "2success tflite");
-
-                int[] shape = tflite.getInputTensor(0).shape();
-                tfInputSize = new Size(shape[2], shape[1]);
-
-                processor = new ImageProcessor.Builder()
-                        .add(new ResizeWithCropOrPadOp(imageSize, imageSize))
-                        .add(new ResizeOp(tfInputSize.getHeight(), tfInputSize.getWidth(), ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
-                        .add(new Rot90Op(-imageRotationDegrees / 90))
-                        .add(new NormalizeOp(0f, 1f))
-                        .build();
-
-                tfImageBuffer.load(bitmapBuffer);
-                TensorImage tfImage = processor.process(tfImageBuffer);
-
-                Log.d("camerafragment", "3success processor");
-
-                try {
-                    detector = new ObjectDetectionHelper(tflite, FileUtil.loadLabels(CameraFragment.this.requireContext(), "coco_ssd_mobilenet_v1_1.0_labels.txt"));
-                } catch (IOException e) {
-                    Log.e("analyze", "detector: " + e);
-                }
-
-                prediction = detector.predict(tfImage);
-                Log.d("camerafragment", "predict: " + prediction);
-
-                Collections.sort(prediction, new Comparator<ObjectDetectionHelper.ObjectPrediction>() {
-                    @Override
-                    public int compare(ObjectDetectionHelper.ObjectPrediction o1, ObjectDetectionHelper.ObjectPrediction o2) {
-                        return Math.round(o1.getScore()) - Math.round(o2.getScore());
-                    }
-                });
-
-                CameraFragment.this.drawBox(prediction.get(0));
+        imageAnalysis.setAnalyzer(executor, image -> {
+            if (bitmapBuffer==null) {
+                imageRotationDegrees = image.getImageInfo().getRotationDegrees();
+                bitmapBuffer = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
             }
+            if (pauseState) {
+                image.close();
+                return;
+            }
+
+            bitmapBuffer.copyPixelsFromBuffer(image.getPlanes()[0].getBuffer());
+            int imageSize = Math.min(bitmapBuffer.getHeight(), bitmapBuffer.getWidth());
+
+            options.addDelegate(nnApiDelegate);
+            Log.d("camerafragment", "1success options");
+
+            try {
+                tflite = new Interpreter(FileUtil.loadMappedFile(CameraFragment.this.requireContext(),
+                        "coco_ssd_mobilenet_v1_1.0_quant.tflite"), options);
+            } catch (IOException e) {
+                Log.e("analyze", "tflite: " + e);
+            }
+
+            Log.d("camerafragment", "2success tflite");
+
+            int[] shape = tflite.getInputTensor(0).shape();
+            tfInputSize = new Size(shape[2], shape[1]);
+
+            processor = new ImageProcessor.Builder()
+                    .add(new ResizeWithCropOrPadOp(imageSize, imageSize))
+                    .add(new ResizeOp(tfInputSize.getHeight(), tfInputSize.getWidth(), ResizeOp.ResizeMethod.NEAREST_NEIGHBOR))
+                    .add(new Rot90Op(-imageRotationDegrees / 90))
+                    .add(new NormalizeOp(0f, 1f))
+                    .build();
+
+            Log.d("camerafragment", "3success processor");
+
+            try {
+                detector = new ObjectDetection(tflite, FileUtil.loadLabels(CameraFragment.this.requireContext(),
+                        "coco_ssd_mobilenet_v1_1.0_labels.txt"));
+            } catch (IOException e) {
+                Log.e("analyze", "detector: " + e);
+            }
+
+            tfImageBuffer.load(bitmapBuffer);
+            TensorImage tfImage = new TensorImage(DataType.UINT8);
+            tfImage = processor.process(tfImageBuffer);
+
+            prediction = detector.predict(tfImage);
+            Log.d("camerafragment", "predict: " + prediction);
+
+            Collections.sort(prediction, new Comparator<ObjectDetection.ObjectPrediction>() {
+                @Override
+                public int compare(ObjectDetection.ObjectPrediction o1, ObjectDetection.ObjectPrediction o2) {
+                    return Math.round(o1.getScore()) - Math.round(o2.getScore());
+                }
+            });
+
+            CameraFragment.this.drawBox(prediction.get(0));
+            image.close();
         });
 
         CameraSelector cameraSelector = new CameraSelector.Builder()
@@ -224,13 +227,18 @@ public class CameraFragment extends Fragment {
         preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
         cameraProvider.unbindAll();
-        cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview);
+        cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, imageAnalysis, preview);
     }
 
-    private void drawBox(ObjectDetectionHelper.ObjectPrediction predict){
+    private void drawBox(ObjectDetection.ObjectPrediction predict){
         if (predict==null || predict.getScore()<0.5){
-            box_prediction.setVisibility(View.GONE);
-            text_prediction.setVisibility(View.GONE);
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    box_prediction.setVisibility(View.GONE);
+                    text_prediction.setVisibility(View.GONE);
+                }
+            });
             return;
         }
 
