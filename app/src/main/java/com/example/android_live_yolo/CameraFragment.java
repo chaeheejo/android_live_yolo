@@ -9,7 +9,6 @@ import androidx.annotation.NonNull;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
@@ -25,7 +24,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -45,7 +43,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -172,16 +169,13 @@ public class CameraFragment extends Fragment {
             int imageSize = Math.min(bitmapBuffer.getHeight(), bitmapBuffer.getWidth());
 
             options.addDelegate(nnApiDelegate);
-            Log.d("camerafragment", "1success options");
 
             try {
                 tflite = new Interpreter(FileUtil.loadMappedFile(CameraFragment.this.requireContext(),
-                        "coco_ssd_mobilenet_v1_1.0_quant.tflite"), options);
+                        "coco_yolov5.tflite"), options);
             } catch (IOException e) {
-                Log.e("analyze", "tflite: " + e);
+                Log.e("error analyze", "tflite: " + e);
             }
-
-            Log.d("camerafragment", "2success tflite");
 
             int[] shape = tflite.getInputTensor(0).shape();
             tfInputSize = new Size(shape[2], shape[1]);
@@ -193,13 +187,11 @@ public class CameraFragment extends Fragment {
                     .add(new NormalizeOp(0f, 1f))
                     .build();
 
-            Log.d("camerafragment", "3success processor");
-
             try {
                 detector = new ObjectDetection(tflite, FileUtil.loadLabels(CameraFragment.this.requireContext(),
-                        "coco_ssd_mobilenet_v1_1.0_labels.txt"));
+                        "coco_yolov5_labels.txt"));
             } catch (IOException e) {
-                Log.e("analyze", "detector: " + e);
+                Log.e("error analyze", "detector: " + e);
             }
 
             tfImageBuffer.load(bitmapBuffer);
@@ -207,7 +199,6 @@ public class CameraFragment extends Fragment {
             tfImage = processor.process(tfImageBuffer);
 
             prediction = detector.predict(tfImage);
-            Log.d("camerafragment", "predict: " + prediction);
 
             Collections.sort(prediction, new Comparator<ObjectDetection.ObjectPrediction>() {
                 @Override
@@ -231,7 +222,7 @@ public class CameraFragment extends Fragment {
     }
 
     private void drawBox(ObjectDetection.ObjectPrediction predict){
-        if (predict==null || predict.getScore()<0.5){
+        if (predict==null || predict.getScore()<0.3){
             getActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -244,7 +235,6 @@ public class CameraFragment extends Fragment {
 
         RectF location = mapLocation(predict.getLocation());
 
-        text_prediction.setText(String.format("%.2f", predict.getScore())+predict.getLabel());
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) box_prediction.getLayoutParams();
         lp.setMargins(
                 Math.round(location.top),
@@ -252,10 +242,16 @@ public class CameraFragment extends Fragment {
                 Math.min(previewView.getWidth(), Math.round(location.right - location.left)),
                 Math.min(previewView.getHeight(), Math.round(location.bottom - location.top))
         );
-        box_prediction.setLayoutParams(lp);
 
-        text_prediction.setVisibility(View.VISIBLE);
-        box_prediction.setVisibility(View.VISIBLE);
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                text_prediction.setText(String.format("%.2f ", predict.getScore())+predict.getLabel());
+                box_prediction.setLayoutParams(lp);
+                box_prediction.setVisibility(View.VISIBLE);
+                text_prediction.setVisibility(View.VISIBLE);
+            }
+        });
     }
 
     private RectF mapLocation(RectF location){

@@ -2,11 +2,9 @@ package com.example.android_live_yolo;
 
 import android.os.Bundle;
 
-import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.navigation.NavController;
 import androidx.navigation.fragment.NavHostFragment;
 
 import android.view.LayoutInflater;
@@ -16,7 +14,6 @@ import android.widget.Button;
 
 public class HomeFragment extends Fragment {
 
-    private Button bt_random;
     private Button bt_camera;
 
     public HomeFragment() {
@@ -44,19 +41,11 @@ public class HomeFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         bt_camera = view.findViewById(R.id.home_btn_live);
-        bt_random = view.findViewById(R.id.home_btn_random);
 
         bt_camera.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 NavHostFragment.findNavController(HomeFragment.this).navigate(R.id.action_homeFragment_to_cameraFragment);
-            }
-        });
-
-        bt_random.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                NavHostFragment.findNavController(HomeFragment.this).navigate(R.id.action_homeFragment_to_randomFragment);
             }
         });
     }
