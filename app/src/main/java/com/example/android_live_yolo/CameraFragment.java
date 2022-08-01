@@ -1,22 +1,30 @@
 package com.example.android_live_yolo;
 
 import android.Manifest;
+import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Matrix;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LifecycleOwner;
 
+import android.os.Environment;
 import android.util.Log;
 import android.util.Size;
 import android.view.LayoutInflater;
@@ -25,9 +33,11 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.checkerframework.checker.units.qual.C;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
@@ -39,9 +49,15 @@ import org.tensorflow.lite.support.image.ops.ResizeOp;
 import org.tensorflow.lite.support.image.ops.ResizeWithCropOrPadOp;
 import org.tensorflow.lite.support.image.ops.Rot90Op;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -56,12 +72,10 @@ public class CameraFragment extends Fragment {
     private ImageButton camera_btn;
     private TextView text_prediction;
     private View box_prediction;
-    private ImageView image_predicted;
 
     private Bitmap bitmapBuffer;
     private int imageRotationDegrees;
     private Size tfInputSize;
-    private boolean pauseState;
 
     private Interpreter tflite;
     private Interpreter.Options options;
@@ -103,10 +117,18 @@ public class CameraFragment extends Fragment {
         camera_btn = view.findViewById(R.id.camera_capture_button);
         text_prediction = view.findViewById(R.id.text_prediction);
         box_prediction = view.findViewById(R.id.box_prediction);
-        image_predicted = view.findViewById(R.id.image_predicted);
 
         ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.CAMERA}, 1);
         cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext());
+
+        cameraProviderFuture.addListener(() -> {
+            try {
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                analysisImage(cameraProvider);
+            } catch (ExecutionException | InterruptedException e) {
+                Log.e("home", "at listener: ", e);
+            }
+        }, ContextCompat.getMainExecutor(requireContext()));
 
         camera_btn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -115,30 +137,7 @@ public class CameraFragment extends Fragment {
             }
         });
 
-        cameraProviderFuture.addListener(() -> {
-            try {
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                bindPreview(cameraProvider);
-                analysisImage(cameraProvider);
-            } catch (ExecutionException | InterruptedException e) {
-                Log.e("home", "at listener: ", e);
-            }
-        }, ContextCompat.getMainExecutor(requireContext()));
 
-    }
-
-    private void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
-        Preview preview = new Preview.Builder()
-                .build();
-
-        CameraSelector cameraSelector = new CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-                .build();
-
-        preview.setSurfaceProvider(previewView.getSurfaceProvider());
-
-        cameraProvider.unbindAll();
-        cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, preview);
     }
 
     private void analysisImage(@NonNull ProcessCameraProvider cameraProvider){
@@ -154,15 +153,10 @@ public class CameraFragment extends Fragment {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
 
-
         imageAnalysis.setAnalyzer(executor, image -> {
             if (bitmapBuffer==null) {
                 imageRotationDegrees = image.getImageInfo().getRotationDegrees();
                 bitmapBuffer = Bitmap.createBitmap(image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
-            }
-            if (pauseState) {
-                image.close();
-                return;
             }
 
             bitmapBuffer.copyPixelsFromBuffer(image.getPlanes()[0].getBuffer());
@@ -300,7 +294,31 @@ public class CameraFragment extends Fragment {
     }
 
     private void captureImage(){
+        String path = Environment.getExternalStorageDirectory()+"/Pictures";
+        File storageDir = new File(path);
+        if (!storageDir.exists()) {storageDir.mkdir();}
 
+        long now = System.currentTimeMillis();
+        Date when = new Date(now);
+        SimpleDateFormat nameFormat = new SimpleDateFormat("yyyy-MM-dd_hh-mm-ss");
+
+        String fileName = nameFormat.format(when)+".jpg";
+        File file = new File(storageDir, fileName);
+        try {
+            file.getParentFile().mkdir();
+            if (!file.createNewFile()){
+                Log.e("warning captureImage", "createNewFile: file is already created");
+            }
+            FileOutputStream outputStream = new FileOutputStream(file, true);
+            bitmapBuffer.compress(Bitmap.CompressFormat.JPEG, 50, outputStream);
+            Toast.makeText(requireContext(), "success to save image", Toast.LENGTH_SHORT).show();
+        }catch (FileNotFoundException e){
+            Log.e("error captureImage", "onImageSaved: ", e);
+            Toast.makeText(requireContext(), "fail to save image", Toast.LENGTH_SHORT).show();
+        }catch(IOException e){
+            Log.e("error captureImage", "onImageSaved-IOException: ", e);
+            Toast.makeText(requireContext(), "fail to save image", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -309,6 +327,4 @@ public class CameraFragment extends Fragment {
         tflite.close();
         nnApiDelegate.close();
     }
-
-
 }

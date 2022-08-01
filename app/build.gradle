@@ -9,8 +9,8 @@ android {
 
     defaultConfig {
         applicationId "com.example.android_live_yolo"
-        minSdk 21
-        targetSdk 32
+        minSdk 29
+        targetSdk 30
         versionCode 1
         versionName "1.0"
 
