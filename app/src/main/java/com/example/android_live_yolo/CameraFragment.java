@@ -1,26 +1,19 @@
 package com.example.android_live_yolo;
 
 import android.Manifest;
-import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Matrix;
 import android.graphics.RectF;
-import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.content.res.ResourcesCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.LifecycleOwner;
 
@@ -31,13 +24,11 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
-import org.checkerframework.checker.units.qual.C;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.nnapi.NnApiDelegate;
@@ -53,7 +44,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Comparator;
@@ -258,6 +248,7 @@ public class CameraFragment extends Fragment {
 
         int lensFacing = CameraSelector.LENS_FACING_BACK;
         boolean isFrontFacing = lensFacing == CameraSelector.LENS_FACING_FRONT;
+
         RectF mirrorLocation;
         if (isFrontFacing){
              mirrorLocation = new RectF(
@@ -273,6 +264,7 @@ public class CameraFragment extends Fragment {
 
         float midX = (mirrorLocation.left + mirrorLocation.right) / 2f;
         float midY = (mirrorLocation.top + mirrorLocation.bottom) / 2f;
+
         RectF marginLocation;
         if (previewView.getWidth() < previewView.getHeight()){
             marginLocation = new RectF(
@@ -304,13 +296,18 @@ public class CameraFragment extends Fragment {
 
         String fileName = nameFormat.format(when)+".jpg";
         File file = new File(storageDir, fileName);
+
         try {
             file.getParentFile().mkdir();
+
             if (!file.createNewFile()){
                 Log.e("warning captureImage", "createNewFile: file is already created");
             }
+
             FileOutputStream outputStream = new FileOutputStream(file, true);
+
             bitmapBuffer.compress(Bitmap.CompressFormat.JPEG, 50, outputStream);
+
             Toast.makeText(requireContext(), "success to save image", Toast.LENGTH_SHORT).show();
         }catch (FileNotFoundException e){
             Log.e("error captureImage", "onImageSaved: ", e);
