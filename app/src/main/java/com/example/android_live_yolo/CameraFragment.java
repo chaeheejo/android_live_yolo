@@ -66,6 +66,9 @@ public class CameraFragment extends Fragment {
     private Bitmap bitmapBuffer;
     private int imageRotationDegrees;
     private Size tfInputSize;
+    private float frameCounter;
+    private long lastFPSTime;
+    private double FPS;
 
     private Interpreter tflite;
     private Interpreter.Options options;
@@ -143,6 +146,9 @@ public class CameraFragment extends Fragment {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
 
+        frameCounter =0;
+        lastFPSTime = System.currentTimeMillis();
+
         imageAnalysis.setAnalyzer(executor, image -> {
             if (bitmapBuffer==null) {
                 imageRotationDegrees = image.getImageInfo().getRotationDegrees();
@@ -184,14 +190,16 @@ public class CameraFragment extends Fragment {
 
             prediction = detector.predict(tfImage);
 
-            Collections.sort(prediction, new Comparator<ObjectDetection.ObjectPrediction>() {
-                @Override
-                public int compare(ObjectDetection.ObjectPrediction o1, ObjectDetection.ObjectPrediction o2) {
-                    return Math.round(o1.getScore()) - Math.round(o2.getScore());
-                }
-            });
+            double fps =0;
+            int frameCount = 10;
+            if (++frameCounter % frameCount == 0){
+                long now = System.currentTimeMillis();
+                long delta = now - lastFPSTime;
+                fps = 1000.0 * frameCount / delta;
+                lastFPSTime = now;
+            }
 
-            CameraFragment.this.drawBox(prediction.get(0));
+            CameraFragment.this.drawBox(prediction.get(0), fps);
             image.close();
         });
 
@@ -205,8 +213,10 @@ public class CameraFragment extends Fragment {
         cameraProvider.bindToLifecycle((LifecycleOwner)this, cameraSelector, imageAnalysis, preview);
     }
 
-    private void drawBox(ObjectDetection.ObjectPrediction predict){
-        if (predict==null || predict.getScore()<0.3){
+    private void drawBox(ObjectDetection.ObjectPrediction predict, double fps){
+        if (fps!=0){ FPS=fps;}
+
+        if (predict==null || predict.getScore()<0.5){
             getActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -227,10 +237,15 @@ public class CameraFragment extends Fragment {
                 Math.min(previewView.getHeight(), Math.round(location.bottom - location.top))
         );
 
+        Log.d("camera", String.format("top %.2f", location.top));
+        Log.d("camera", String.format("left %.2f", location.left));
+        Log.d("camera", String.format("right %d", Math.min(previewView.getWidth(), Math.round(location.right - location.left))));
+        Log.d("camera", String.format("bottom %d", Math.min(previewView.getHeight(), Math.round(location.bottom - location.top))));
+
         getActivity().runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                text_prediction.setText(String.format("%.2f ", predict.getScore())+predict.getLabel());
+                text_prediction.setText(String.format("%.2f ", predict.getScore())+predict.getLabel()+String.format("\n%.2f FPS", FPS));
                 box_prediction.setLayoutParams(lp);
                 box_prediction.setVisibility(View.VISIBLE);
                 text_prediction.setVisibility(View.VISIBLE);
